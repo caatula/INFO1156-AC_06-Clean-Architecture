@@ -498,4 +498,97 @@ export class PostsModule {}
 ✅ **Separación de Responsabilidades**: Cada use case hace una cosa y la hace bien
 ✅ **Facilidad de Testing**: Fácil crear mocks de repositorios para tests unitarios
 
+---
+
+## ELSA: Controllers, Mappers y Filtro Global
+
+### Problemas Identificados
+
+#### 1. **Controladores acoplados a servicios**
+- **Problema**: `PostsController`, `CommentsController` y `LikesController` dependían directamente de servicios en lugar de use cases.
+- **Impacto**: La capa de presentación no estaba aislada y la orquestación de negocio quedó dispersa.
+
+#### 2. **Respuestas sin mapeo uniforme**
+- **Problema**: Las respuestas devolvían entidades y payloads directos de Prisma sin convertirlos a DTO de salida.
+- **Impacto**: Se exponía información innecesaria y no había un formato de salida consistente.
+
+#### 3. **Ausencia de filtro global para errores**
+- **Problema**: Los errores de dominio y HTTP se manejaban de forma inconsistente en cada módulo.
+- **Impacto**: Las respuestas de error no eran uniformes y complicaban el control de excepciones.
+
+---
+
+### Solución implementada
+
+- Moví los controladores a `presentation/controllers` y los actualicé para inyectar use cases.
+- Añadí mappers de salida en `presentation/mappers` para convertir entidades a respuestas controladas.
+- Creé `src/shared/filters/exception.filter.ts` y lo registré en `src/app.module.ts` con `APP_FILTER`.
+- Añadí casos de uso de listado para separar la lógica de orquestación de la capa de presentación.
+
+---
+
+### Código resumido
+
+```typescript
+// src/posts/presentation/controllers/posts.controller.ts
+return {
+  ok: true,
+  payload: PostMapper.toResponse(await this.createPostUseCase.execute(body)),
+}
+```
+
+```typescript
+// src/comments/presentation/controllers/comments.controller.ts
+const response = await this.listCommentsByPostIdUseCase.execute(postId)
+return {
+  total_comments: response.total_comments,
+  comments: response.comments.map(CommentMapper.toResponse),
+}
+```
+
+```typescript
+// src/shared/filters/exception.filter.ts
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    // normaliza HttpException y DomainException
+  }
+}
+```
+
+---
+
+### Diagrama de flujo
+
+```
+Presentation Layer         Application Layer          Infrastructure Layer
+-----------------         ------------------          ----------------------
+PostsController  -->       CreatePostUseCase  -->      PostRepository
+CommentsController -->      CreateCommentUseCase -->      CommentRepository
+LikesController  -->       AddLikeUseCase     -->      LikeRepository
+
+                 \           /                     
+                  \         /                      
+                   v       v                       
+                AllExceptionsFilter               
+                    (global)
+
+Response Mapping: Controller -> Mapper -> HTTP response
+```
+
+---
+
+### Archivos creados para esta tarea
+
+- `src/posts/presentation/controllers/posts.controller.ts`
+- `src/comments/presentation/controllers/comments.controller.ts`
+- `src/likes/presentation/controllers/likes.controller.ts`
+- `src/posts/presentation/mappers/post.mapper.ts`
+- `src/comments/presentation/mappers/comment.mapper.ts`
+- `src/likes/presentation/mappers/like.mapper.ts`
+- `src/shared/filters/exception.filter.ts`
+- `src/posts/application/use-cases/list-posts.use-case.ts`
+- `src/comments/application/use-cases/list-comments-by-post.use-case.ts`
+
+
 
