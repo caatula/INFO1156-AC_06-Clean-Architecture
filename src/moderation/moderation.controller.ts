@@ -13,7 +13,10 @@ export class ModerationController {
 
     @Post()
     async create(@Body() body: CreateProhibitedWordDto) {
-        const created = await this.moderationService.create(body.word, body.category)
+        const created = await this.moderationService.create(
+            body.word,
+            body.category,
+        )
         return created
     }
 

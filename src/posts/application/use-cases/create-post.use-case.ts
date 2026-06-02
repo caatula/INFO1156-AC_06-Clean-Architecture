@@ -9,7 +9,8 @@ import { ModerationService } from "../../../moderation/moderation.service"
 @Injectable()
 export class CreatePostUseCase {
     constructor(
-        @Inject("IPostRepository") private readonly postRepository: IPostRepository,
+        @Inject("IPostRepository")
+        private readonly postRepository: IPostRepository,
         private readonly moderationService: ModerationService,
     ) {}
 

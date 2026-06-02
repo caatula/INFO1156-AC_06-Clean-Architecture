@@ -10,8 +10,10 @@ import { PostNotFoundException } from "../../../shared/exceptions/post-not-found
 @Injectable()
 export class AddLikeUseCase {
     constructor(
-        @Inject("ILikeRepository") private readonly likeRepository: ILikeRepository,
-        @Inject("IPostRepository") private readonly postRepository: IPostRepository,
+        @Inject("ILikeRepository")
+        private readonly likeRepository: ILikeRepository,
+        @Inject("IPostRepository")
+        private readonly postRepository: IPostRepository,
     ) {}
 
     async execute(input: CreateLikeInput): Promise<Like> {
