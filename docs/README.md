@@ -286,26 +286,7 @@ export class CreatePostDto {
 ✅ **Separación de Capas**: Cada capa tiene responsabilidades claras
 ✅ **Testabilidad**: Interfaces permiten mockear repositorios
 ✅ **Flexibilidad**: Cambiar BD sin afectar lógica de negocio
-✅ **SRP**: Servicios delegarán lógica a use cases (Persona 2)
 ✅ **DTOs Organizados**: Separados por capa (presentación vs dominio)
 ✅ **Type Safety**: Entidades puras garantizan tipos correctos
 
----
 
-### Validación
-
-```bash
-✓ npm run build    # Compila sin errores TypeScript
-✓ npm run lint     # Pasa ESLint sin errores
-✓ Imports limpio   # Sin imports no utilizados
-✓ DTOs validando   # class-validator funcionando
-```
-
----
-
-### Próximos Pasos (Persona 2)
-
-- Crear **Use Cases** en `src/*/application/use-cases/`
-- Inyectar **repositories** (no servicios) en use cases
-- Implementar **excepciones personalizadas**
-- Use cases llamarán lógica de negocio y retornarán **entidades de dominio**
