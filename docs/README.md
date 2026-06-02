@@ -1,6 +1,6 @@
 # Clean Architecture - Documentación de Soluciones
 
-## Persona 1: Repository Pattern Implementation
+## CATALINA: Repository Pattern Implementation
 
 ### Problemas Identificados
 
@@ -288,5 +288,214 @@ export class CreatePostDto {
 ✅ **Flexibilidad**: Cambiar BD sin afectar lógica de negocio
 ✅ **DTOs Organizados**: Separados por capa (presentación vs dominio)
 ✅ **Type Safety**: Entidades puras garantizan tipos correctos
+
+---
+
+## MATHIAS: Use Cases Layer Implementation
+
+### Problemas Identificados
+
+#### 1. **Sin Capa de Casos de Uso**
+- **Problema**: La lógica de negocio estaba dispersa en servicios sin estructura clara de casos de uso.
+- **Impacto**: Difícil de entender qué acciones puede realizar el sistema.
+
+#### 2. **Servicios con Múltiples Responsabilidades**
+- **Problema**: Los servicios mezclaban lógica de negocio con orquestación de dependencias.
+- **Impacto**: Difícil de testear y mantener, violando Single Responsibility Principle.
+
+#### 3. **Sin Manejo Centralizado de Excepciones de Negocio**
+- **Problema**: No existía una forma consistente de manejar errores del dominio.
+- **Impacto**: Excepciones genéricas sin semántica clara de negocio.
+
+#### 4. **Inyección de Servicios en lugar de Repositorios**
+- **Problema**: Los casos de uso deberían inyectar repositorios, no otros servicios.
+- **Impacto**: Acoplamiento innecesario entre capas de aplicación.
+
+---
+
+### Soluciones Implementadas
+
+#### 1. **Domain Exceptions (Excepciones de Negocio)**
+
+Excepciones base que representan errores del dominio:
+
+```typescript
+// src/shared/exceptions/domain.exception.ts
+export class DomainException extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DomainException';
+  }
+}
+
+// src/shared/exceptions/post-not-found.exception.ts
+export class PostNotFoundException extends DomainException {
+  constructor(postId: string) {
+    super(`Post with ID "${postId}" not found`);
+    this.name = 'PostNotFoundException';
+  }
+}
+```
+
+**Excepciones creadas:**
+- `DomainException` - Base para todas las excepciones del dominio
+- `PostNotFoundException` - Lanzada cuando no se encuentra un post
+
+#### 2. **Use Cases (Application Layer)**
+
+Implementación de casos de uso con patrón `execute()`:
+
+```typescript
+// src/posts/application/use-cases/create-post.use-case.ts
+@Injectable()
+export class CreatePostUseCase {
+  constructor(private readonly postRepository: IPostRepository) {}
+
+  async execute(input: CreatePostInput): Promise<Post> {
+    const post = await this.postRepository.create(input);
+    return post;
+  }
+}
+
+// src/comments/application/use-cases/create-comment.use-case.ts
+@Injectable()
+export class CreateCommentUseCase {
+  constructor(
+    private readonly commentRepository: ICommentRepository,
+    private readonly postRepository: IPostRepository,
+  ) {}
+
+  async execute(input: CreateCommentInput): Promise<Comment> {
+    const post = await this.postRepository.findById(input.postId);
+    if (!post) {
+      throw new PostNotFoundException(input.postId);
+    }
+    const comment = await this.commentRepository.create(input);
+    return comment;
+  }
+}
+```
+
+**Use Cases creados:**
+- `CreatePostUseCase` - Crear nuevo post
+- `GetFeedPostsUseCase` - Obtener feed de posts
+- `CreateCommentUseCase` - Crear comentario (valida que post existe)
+- `AddLikeUseCase` - Agregar like/reacción (valida que post existe)
+- `ModerateTextUseCase` - Moderar contenido de texto
+
+#### 3. **Module Integration**
+
+Registro de use cases en los módulos para inyección de dependencias:
+
+```typescript
+// src/posts/posts.module.ts
+@Module({
+  imports: [ModerationModule],
+  controllers: [PostsController],
+  providers: [
+    PostsService,
+    FeedRankingStrategyFactory,
+    CreatePostUseCase,
+    GetFeedPostsUseCase,
+    {
+      provide: "IPostRepository",
+      useClass: PostRepository,
+    },
+  ],
+  exports: [PostsService, "IPostRepository", CreatePostUseCase, GetFeedPostsUseCase],
+})
+export class PostsModule {}
+```
+
+---
+
+### Diagrama de Arquitectura con Use Cases
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                  PRESENTATION LAYER                          │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  PostsController                                       │  │
+│  │  - POST /posts → dispatch to use case                  │  │
+│  │  - GET /feed → dispatch to use case                    │  │
+│  └────────────────┬─────────────────────────────────────┘   │
+└──────────────────┼─────────────────────────────────────────────┘
+                   │ invoke execute()
+┌──────────────────┼─────────────────────────────────────────────┐
+│                  │      APPLICATION LAYER (Use Cases)         │
+│  ┌───────────────▼──────────────────────────────────────┐    │
+│  │  CreatePostUseCase.execute(input)                    │    │
+│  │  - Receives CreatePostInput                          │    │
+│  │  - Calls postRepository.create(input)                │    │
+│  │  - Returns Post entity                               │    │
+│  └────────────────┬───────────────────────────────────┘    │
+│                   │ calls                                    │
+│  ┌───────────────▼──────────────────────────────────────┐    │
+│  │  CreateCommentUseCase.execute(input)                │    │
+│  │  - Validates post exists                            │    │
+│  │  - Throws PostNotFoundException if not found         │    │
+│  │  - Calls commentRepository.create(input)            │    │
+│  │  - Returns Comment entity                           │    │
+│  └────────────────┬───────────────────────────────────┘    │
+└──────────────────┼────────────────────────────────────────────┘
+                   │
+┌──────────────────┼────────────────────────────────────────────┐
+│                  │       DOMAIN LAYER (Entities & Interfaces) │
+│  ┌───────────────▼──────────────────────────────────────┐    │
+│  │  Post Entity                                         │    │
+│  │  Comment Entity                                      │    │
+│  │  Like Entity                                         │    │
+│  └────────────────────────────────────────────────────┘    │
+│                                                             │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │  IPostRepository (Interface)                       │    │
+│  │  ICommentRepository (Interface)                    │    │
+│  │  ILikeRepository (Interface)                       │    │
+│  │  DomainException (Base Exception)                  │    │
+│  │  PostNotFoundException                             │    │
+│  └────────────────────────────────────────────────────┘    │
+└───────────────┬─────────────────────────────────────────────┘
+                │ implements
+┌───────────────┼─────────────────────────────────────────────┐
+│               │   INFRASTRUCTURE LAYER                      │
+│  ┌────────────▼──────────────────────────────────────┐    │
+│  │  PostRepository                                    │    │
+│  │  CommentRepository                                 │    │
+│  │  LikeRepository                                    │    │
+│  │  (uses PrismaService)                              │    │
+│  └────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Archivos Creados (MATHIAS)
+
+#### Application Layer (Use Cases)
+- `src/posts/application/use-cases/create-post.use-case.ts`
+- `src/posts/application/use-cases/get-feed-posts.use-case.ts`
+- `src/comments/application/use-cases/create-comment.use-case.ts`
+- `src/likes/application/use-cases/add-like.use-case.ts`
+- `src/moderation/application/use-cases/moderate-text.use-case.ts`
+
+#### Shared Exceptions
+- `src/shared/exceptions/domain.exception.ts`
+- `src/shared/exceptions/post-not-found.exception.ts`
+
+#### Module Updates
+- `src/posts/posts.module.ts` - Exports CreatePostUseCase, GetFeedPostsUseCase
+- `src/comments/comments.module.ts` - Exports CreateCommentUseCase
+- `src/likes/likes.module.ts` - Exports AddLikeUseCase
+- `src/moderation/moderation.module.ts` - Exports ModerateTextUseCase
+
+---
+
+### Beneficios Alcanzados
+
+✅ **Casos de Uso Explícitos**: Cada acción del sistema es un caso de uso identificable
+✅ **Inyección de Repositorios**: Use cases solo dependen de interfaces, no de servicios
+✅ **Excepciones Semánticas**: Errores claros del dominio en lugar de excepciones genéricas
+✅ **Separación de Responsabilidades**: Cada use case hace una cosa y la hace bien
+✅ **Facilidad de Testing**: Fácil crear mocks de repositorios para tests unitarios
 
 
