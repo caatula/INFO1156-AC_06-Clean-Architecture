@@ -20,6 +20,11 @@ import { GetFeedPostsUseCase } from "@/posts/application/use-cases/get-feed-post
             useClass: PostRepository,
         },
     ],
-    exports: [PostsService, "IPostRepository", CreatePostUseCase, GetFeedPostsUseCase],
+    exports: [
+        PostsService,
+        "IPostRepository",
+        CreatePostUseCase,
+        GetFeedPostsUseCase,
+    ],
 })
 export class PostsModule {}
