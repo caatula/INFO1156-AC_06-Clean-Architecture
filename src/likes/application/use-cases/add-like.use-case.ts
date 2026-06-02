@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Inject } from "@nestjs/common"
 import {
     ILikeRepository,
     CreateLikeInput,
@@ -10,8 +10,8 @@ import { PostNotFoundException } from "../../../shared/exceptions/post-not-found
 @Injectable()
 export class AddLikeUseCase {
     constructor(
-        private readonly likeRepository: ILikeRepository,
-        private readonly postRepository: IPostRepository,
+        @Inject("ILikeRepository") private readonly likeRepository: ILikeRepository,
+        @Inject("IPostRepository") private readonly postRepository: IPostRepository,
     ) {}
 
     async execute(input: CreateLikeInput): Promise<Like> {

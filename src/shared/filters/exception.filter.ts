@@ -1,4 +1,11 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from "@nestjs/common"
+import {
+    ArgumentsHost,
+    Catch,
+    ExceptionFilter,
+    HttpException,
+    HttpStatus,
+    NotFoundException,
+} from "@nestjs/common"
 import { Request, Response } from "express"
 import { DomainException } from "@/shared/exceptions/domain.exception"
 
@@ -17,7 +24,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
             path: request.url,
         }
 
-        if (exception instanceof HttpException) {
+        if (exception instanceof NotFoundException) {
+            status = HttpStatus.NOT_FOUND
+            const exceptionResponse = exception.getResponse()
+            body = {
+                ok: false,
+                message:
+                    typeof exceptionResponse === "string"
+                        ? exceptionResponse
+                        : ((exceptionResponse as any).message ??
+                          exception.message),
+                timestamp: new Date().toISOString(),
+                path: request.url,
+            }
+        } else if (exception instanceof HttpException) {
             status = exception.getStatus()
             const exceptionResponse = exception.getResponse()
             body = {
@@ -25,7 +45,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
                 message:
                     typeof exceptionResponse === "string"
                         ? exceptionResponse
-                        : (exceptionResponse as any).message ?? exception.message,
+                        : ((exceptionResponse as any).message ??
+                          exception.message),
                 timestamp: new Date().toISOString(),
                 path: request.url,
             }

@@ -14,9 +14,9 @@
         "start:debug": "nest start --debug --watch",
         "start:prod": "node dist/main",
         "lint": "NODE_OPTIONS='--disable-warning=MODULE_TYPELESS_PACKAGE_JSON' eslint \"{src,apps,libs}/**/*.ts\" --fix",
-        "test": "jest --config ./tests/jest.integration.json",
-        "test:integration": "jest --config ./tests/jest.integration.json",
-        "test:watch": "jest --config ./tests/jest.integration.json --watch",
+        "test": "jest --config ./tests/jest.integration.json --runInBand",
+        "test:integration": "jest --config ./tests/jest.integration.json --runInBand",
+        "test:watch": "jest --config ./tests/jest.integration.json --watch --runInBand",
         "prisma:generate": "prisma generate",
         "prisma:migrate": "prisma migrate dev"
     },

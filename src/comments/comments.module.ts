@@ -19,6 +19,11 @@ import { ListCommentsByPostIdUseCase } from "@/comments/application/use-cases/li
             useClass: CommentRepository,
         },
     ],
-    exports: [CommentsService, "ICommentRepository", CreateCommentUseCase, ListCommentsByPostIdUseCase],
+    exports: [
+        CommentsService,
+        "ICommentRepository",
+        CreateCommentUseCase,
+        ListCommentsByPostIdUseCase,
+    ],
 })
 export class CommentsModule {}

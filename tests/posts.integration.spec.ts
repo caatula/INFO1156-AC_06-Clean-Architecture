@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common"
 import { Test, TestingModule } from "@nestjs/testing"
-import { AppModule } from "@/app.module"
 import { PrismaService } from "@/shared/prisma.service"
+import { TestModule } from "./setup/test.module"
 import request from "supertest"
 
 describe("API Integration", () => {
@@ -11,7 +11,7 @@ describe("API Integration", () => {
 
     beforeAll(async () => {
         const moduleFixture: TestingModule = await Test.createTestingModule({
-            imports: [AppModule],
+            imports: [TestModule],
         }).compile()
 
         app = moduleFixture.createNestApplication()
@@ -35,13 +35,25 @@ describe("API Integration", () => {
     })
 
     beforeEach(async () => {
-        await prisma.prohibitedWord.deleteMany()
-        await prisma.like.deleteMany()
+        // Delete in STRICT SEQUENTIAL order to respect FK constraints
+        // Order: comment → like → prohibitedWord → post
         await prisma.comment.deleteMany()
+        await prisma.like.deleteMany()
+        await prisma.prohibitedWord.deleteMany()
+        await prisma.post.deleteMany()
+    })
+
+    afterEach(async () => {
+        // Clean up in STRICT SEQUENTIAL order (same as beforeEach)
+        await prisma.comment.deleteMany()
+        await prisma.like.deleteMany()
+        await prisma.prohibitedWord.deleteMany()
         await prisma.post.deleteMany()
     })
 
     afterAll(async () => {
+        // Disconnect Prisma to release database connections
+        await prisma.$disconnect()
         await app.close()
     })
 
@@ -54,7 +66,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Titulo valido para test",
-                    description: "Descripcion suficientemente larga para crear un post.",
+                    description:
+                        "Descripcion suficientemente larga para crear un post.",
                     imageUrl: "https://example.com/post.jpg",
                     categoryId,
                 })
@@ -64,7 +77,8 @@ describe("API Integration", () => {
             expect(res.body.payload).toMatchObject({
                 id: expect.any(String),
                 title: "Titulo valido para test",
-                description: "Descripcion suficientemente larga para crear un post.",
+                description:
+                    "Descripcion suficientemente larga para crear un post.",
                 imageUrl: "https://example.com/post.jpg",
                 categoryId,
             })
@@ -75,7 +89,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Post sin categoria",
-                    description: "Descripcion valida y larga para el post sin categoria.",
+                    description:
+                        "Descripcion valida y larga para el post sin categoria.",
                     imageUrl: "https://example.com/no-cat.jpg",
                 })
                 .expect(201)
@@ -119,7 +134,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Titulo valido",
-                    description: "Descripcion suficientemente larga para el test.",
+                    description:
+                        "Descripcion suficientemente larga para el test.",
                     imageUrl: "not-a-url",
                 })
                 .expect(400)
@@ -134,7 +150,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "<script>alert(1)</script>",
-                    description: "Descripcion suficientemente larga para el test.",
+                    description:
+                        "Descripcion suficientemente larga para el test.",
                     imageUrl: "https://example.com/post.jpg",
                 })
                 .expect(400)
@@ -170,7 +187,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Titulo normal",
-                    description: "Este texto contiene prohibido en la descripcion.",
+                    description:
+                        "Este texto contiene prohibido en la descripcion.",
                     imageUrl: "https://example.com/post.jpg",
                 })
                 .expect(400)
@@ -229,7 +247,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Post para feed",
-                    description: "Descripcion suficientemente larga para el feed.",
+                    description:
+                        "Descripcion suficientemente larga para el feed.",
                     imageUrl: "https://example.com/feed.jpg",
                 })
                 .expect(201)
@@ -282,7 +301,7 @@ describe("API Integration", () => {
 
             expect(res.body.rows[0].id).toBe(a.body.payload.id)
             expect(res.body.rows[0].likesCount).toBe(3)
-            expect(res.body.rows[1].id).toBe(b.body.payload.id)
+            expect(res.body.rows[1].id).toBe(b.body.id)
         })
 
         it("filters feed by categoryId", async () => {
@@ -294,7 +313,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Post con categoria",
-                    description: "Descripcion para el post con categoria asignada.",
+                    description:
+                        "Descripcion para el post con categoria asignada.",
                     imageUrl: "https://example.com/cat.jpg",
                     categoryId: cat.id,
                 })
@@ -304,7 +324,8 @@ describe("API Integration", () => {
                 .post("/api/posts")
                 .send({
                     title: "Post sin categoria",
-                    description: "Descripcion para el post sin categoria alguna.",
+                    description:
+                        "Descripcion para el post sin categoria alguna.",
                     imageUrl: "https://example.com/no-cat.jpg",
                 })
                 .expect(201)
@@ -347,7 +368,7 @@ describe("API Integration", () => {
                 .send({ content: "Comentario valido y normal" })
                 .expect(201)
 
-            expect(res.body).toMatchObject({
+            expect(res.body.payload).toMatchObject({
                 id: expect.any(String),
                 postId: post.body.payload.id,
                 content: "Comentario valido y normal",
@@ -376,7 +397,7 @@ describe("API Integration", () => {
 
         it("rejects comment for non-existent post", async () => {
             await request(app.getHttpServer())
-                .post("/api/posts/nonexistent-id-12345/comments")
+                .post("/api/posts/00000000-0000-0000-0000-000000000000/comments")
                 .send({ content: "Comentario valido" })
                 .expect(404)
         })
@@ -438,7 +459,7 @@ describe("API Integration", () => {
 
         it("returns 404 for non-existent post", async () => {
             await request(app.getHttpServer())
-                .get("/api/posts/nonexistent-id-12345/comments")
+                .get("/api/posts/00000000-0000-0000-0000-000000000000/comments")
                 .expect(404)
         })
     })
@@ -462,7 +483,7 @@ describe("API Integration", () => {
                 .send({})
                 .expect(201)
 
-            expect(res.body).toMatchObject({
+            expect(res.body.payload).toMatchObject({
                 id: expect.any(String),
                 postId: post.body.payload.id,
                 reactionType: "like",
@@ -486,13 +507,13 @@ describe("API Integration", () => {
                 .send({ reactionType: "fire", weight: 3 })
                 .expect(201)
 
-            expect(res.body.reactionType).toBe("fire")
-            expect(res.body.weight).toBe(3)
+            expect(res.body.payload.reactionType).toBe("fire")
+            expect(res.body.payload.weight).toBe(3)
         })
 
         it("rejects like for non-existent post", async () => {
             await request(app.getHttpServer())
-                .post("/api/posts/nonexistent-id-12345/likes")
+                .post("/api/posts/00000000-0000-0000-0000-000000000000/likes")
                 .send({ reactionType: "like", weight: 1 })
                 .expect(404)
         })
@@ -633,7 +654,7 @@ describe("API Integration", () => {
 
         it("returns 404 for non-existent word", async () => {
             await request(app.getHttpServer())
-                .delete("/api/admin/prohibited-words/nonexistent-id-12345")
+                .delete("/api/admin/prohibited-words/00000000-0000-0000-0000-000000000000")
                 .expect(404)
         })
     })

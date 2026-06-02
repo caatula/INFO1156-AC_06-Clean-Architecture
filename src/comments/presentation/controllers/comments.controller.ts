@@ -13,7 +13,8 @@ export class CommentsController {
 
     @Get()
     async list(@Param("id") postId: string) {
-        const { total_comments, comments } = await this.listCommentsByPostIdUseCase.execute(postId)
+        const { total_comments, comments } =
+            await this.listCommentsByPostIdUseCase.execute(postId)
 
         return {
             total_comments,

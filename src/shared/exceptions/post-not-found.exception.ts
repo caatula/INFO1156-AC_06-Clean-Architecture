@@ -1,6 +1,6 @@
-import { DomainException } from "./domain.exception"
+import { NotFoundException } from "@nestjs/common"
 
-export class PostNotFoundException extends DomainException {
+export class PostNotFoundException extends NotFoundException {
     constructor(postId: string) {
         super(`Post with ID "${postId}" not found`)
         this.name = "PostNotFoundException"

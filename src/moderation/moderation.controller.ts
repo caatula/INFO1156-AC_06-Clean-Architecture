@@ -12,8 +12,9 @@ export class ModerationController {
     }
 
     @Post()
-    create(@Body() body: CreateProhibitedWordDto) {
-        return this.moderationService.create(body.word, body.category)
+    async create(@Body() body: CreateProhibitedWordDto) {
+        const created = await this.moderationService.create(body.word, body.category)
+        return created
     }
 
     @Delete(":id")

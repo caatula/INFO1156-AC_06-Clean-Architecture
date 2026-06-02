@@ -20,7 +20,11 @@ export class PostsService {
             )
         }
 
-        return await this.prisma.post.create({ data })
+        return await this.prisma.post.create({
+            data: {
+                ...data,
+            },
+        })
     }
 
     findAll() {

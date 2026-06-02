@@ -19,10 +19,12 @@ export class PostsController {
     @Post()
     async create(@Body() body: CreatePostDto) {
         const created = await this.createPostUseCase.execute(body)
+        const response = PostMapper.toResponse(created)
 
         return {
             ok: true,
-            payload: PostMapper.toResponse(created),
+            payload: response,
+            ...response,
         }
     }
 
@@ -39,7 +41,9 @@ export class PostsController {
     @Get("feed")
     async getFeed(@Query() query: FeedQueryDto) {
         const mode = query.mode ?? "latest"
-        const feedPosts = await this.getFeedPostsUseCase.execute(query.categoryId)
+        const feedPosts = await this.getFeedPostsUseCase.execute(
+            query.categoryId,
+        )
         const rankedPosts = this.feedRankingFactory
             .forMode(mode)
             .rank(feedPosts)
