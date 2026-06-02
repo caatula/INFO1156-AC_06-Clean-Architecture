@@ -1,16 +1,12 @@
 import { Injectable } from "@nestjs/common"
-import {
-    IPostRepository,
-    PostFilters,
-} from "../../domain/repositories/post.repository.interface"
-import { Post } from "../../domain/entities/post.entity"
+import { PostsService } from "@/posts/posts.service"
+import { FeedPost } from "@/posts/feed-ranking.strategy"
 
 @Injectable()
 export class GetFeedPostsUseCase {
-    constructor(private readonly postRepository: IPostRepository) {}
+    constructor(private readonly postsService: PostsService) {}
 
-    async execute(filters?: PostFilters): Promise<Post[]> {
-        const posts = await this.postRepository.findMany(filters)
-        return posts
+    async execute(categoryId?: string): Promise<FeedPost[]> {
+        return this.postsService.getFeedPosts(categoryId)
     }
 }
