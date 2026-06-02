@@ -11,8 +11,10 @@ import { ModerationService } from "../../../moderation/moderation.service"
 @Injectable()
 export class CreateCommentUseCase {
     constructor(
-        @Inject("ICommentRepository") private readonly commentRepository: ICommentRepository,
-        @Inject("IPostRepository") private readonly postRepository: IPostRepository,
+        @Inject("ICommentRepository")
+        private readonly commentRepository: ICommentRepository,
+        @Inject("IPostRepository")
+        private readonly postRepository: IPostRepository,
         private readonly moderationService: ModerationService,
     ) {}
 
