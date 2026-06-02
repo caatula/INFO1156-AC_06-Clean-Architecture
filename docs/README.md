@@ -590,5 +590,198 @@ Response Mapping: Controller -> Mapper -> HTTP response
 - `src/posts/application/use-cases/list-posts.use-case.ts`
 - `src/comments/application/use-cases/list-comments-by-post.use-case.ts`
 
+---
+
+## CRISTIAN: Response Pattern, Content Moderation & Exception Mapping
+
+### Problemas Identificados
+
+#### 1. **Respuestas Inconsistentes entre Endpoints**
+- **Problema**: Algunos endpoints devolvían `{ ok: true, payload: {...} }` mientras que otros devolvían objetos planos.
+- **Impacto**: Tests fallaban porque esperaban patrones inconsistentes de acceso a datos.
+
+#### 2. **Falta de Validación de Contenido en Creación**
+- **Problema**: Posts y comentarios no validaban contenido prohibido antes de persistir.
+- **Impacto**: Moderación no bloqueaba palabras prohibidas, permitiendo contenido inapropiado en BD.
+
+#### 3. **Mapeo Incorrecto de Errores HTTP**
+- **Problema**: Recursos no encontrados devolvían 400 en lugar de 404, y el orden de excepciones en el filtro era incorrecto.
+- **Impacto**: Clientes no podían diferenciar entre validation errors (400) y recursos inexistentes (404).
+
+#### 4. **Deadlocks en SQLite durante Limpieza de Tests**
+- **Problema**: `Promise.all()` en beforeEach/afterEach causaba bloqueos concurrentes de la BD SQLite.
+- **Impacto**: Tests se agotaban (timeouts) sin poder completar la fase de limpieza.
+
+---
+
+### Soluciones Implementadas
+
+#### 1. **Response Envelope Pattern con Spread Operator**
+
+Patrón unificado para respuestas que permite acceso dual a propiedades:
+
+```typescript
+// src/posts/presentation/controllers/posts.controller.ts
+@Post()
+async create(@Body() body: CreatePostDto) {
+    const response = PostMapper.toResponse(
+        await this.createPostUseCase.execute(body)
+    )
+    return {
+        ok: true,
+        payload: response,
+        ...response,  // Spread para acceso directo: res.body.id, res.body.title
+    }
+}
+```
+
+**Beneficio**: Tests pueden acceder tanto `res.body.payload.id` como `res.body.id`
+
+#### 2. **Content Moderation en Use Cases**
+
+Inyección de ModerationService en casos de uso para validación previa a persistencia:
+
+```typescript
+// src/posts/application/use-cases/create-post.use-case.ts
+@Injectable()
+export class CreatePostUseCase {
+    constructor(
+        private readonly postRepository: IPostRepository,
+        private readonly moderationService: ModerationService,
+    ) {}
+
+    async execute(input: CreatePostInput): Promise<Post> {
+        const moderation = await this.moderationService.moderate(input.text)
+        if (!moderation.approved) {
+            throw new BadRequestException(
+                moderation.reason ?? "Post bloqueado por moderación"
+            )
+        }
+        return await this.postRepository.create(input)
+    }
+}
+
+// src/comments/application/use-cases/create-comment.use-case.ts
+async execute(input: CreateCommentInput): Promise<Comment> {
+    const post = await this.postRepository.findById(input.postId)
+    if (!post) {
+        throw new PostNotFoundException(input.postId)  // 404
+    }
+    const moderation = await this.moderationService.moderate(input.content)
+    if (!moderation.approved) {
+        throw new BadRequestException(moderation.reason)  // 400
+    }
+    return await this.commentRepository.create(input)
+}
+```
+
+**Beneficio**: Moderación bloqueada antes de persistencia, respuestas claras al cliente
+
+#### 3. **Exception Mapping con NotFoundException**
+
+Cambio de herencia para mapeo correcto de excepciones HTTP:
+
+```typescript
+// src/shared/exceptions/post-not-found.exception.ts
+import { NotFoundException } from '@nestjs/common'
+
+export class PostNotFoundException extends NotFoundException {
+    constructor(postId: string) {
+        super(`Post with ID "${postId}" not found`)
+    }
+}
+
+// src/shared/filters/exception.filter.ts
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+    catch(exception: unknown, host: ArgumentsHost) {
+        const ctx = host.switchToHttp()
+        const response = ctx.getResponse<Response>()
+
+        let status = HttpStatus.INTERNAL_SERVER_ERROR
+        let message = 'Internal server error'
+
+        // ✅ NotFoundException debe ir PRIMERO (extiende HttpException)
+        if (exception instanceof NotFoundException) {
+            status = HttpStatus.NOT_FOUND  // 404
+        } else if (exception instanceof HttpException) {
+            status = exception.getStatus()
+        } else if (exception instanceof DomainException) {
+            status = HttpStatus.BAD_REQUEST  // 400
+        }
+
+        response.status(status).json({
+            statusCode: status,
+            message,
+            timestamp: new Date().toISOString(),
+        })
+    }
+}
+```
+
+**Beneficio**: Errores 404 para recursos inexistentes, 400 para validaciones de negocio
+
+#### 4. **Database Deadlock Resolution**
+
+Sequential cleanup en tests + Jest flag para prevenir ejecución paralela:
+
+```typescript
+// tests/posts.integration.spec.ts
+afterEach(async () => {
+    // ❌ MALO: Promise.all() causa deadlocks en SQLite
+    // await Promise.all([
+    //     commentService.deleteMany(),
+    //     likeService.deleteMany(),
+    // ])
+
+    // ✅ BUENO: Sequential await respeta FK constraints
+    await commentModel.deleteMany()
+    await likeModel.deleteMany()
+    await prohibitedWordModel.deleteMany()
+    await postModel.deleteMany()
+})
+
+// package.json
+{
+    "scripts": {
+        "test": "jest --config ./tests/jest.integration.json --runInBand",
+        "test:watch": "jest --config ./tests/jest.integration.json --watch --runInBand"
+    }
+}
+```
+
+**Beneficio**: Tests completan sin timeouts, operaciones DB secuenciales sin bloqueos
+
+---
+
+### Archivos Modificados
+
+#### Presentation Layer (Controllers)
+- `src/posts/presentation/controllers/posts.controller.ts` - Agregó spread operator a response
+- `src/moderation/moderation.controller.ts` - Ajustó formato de respuesta
+
+#### Application Layer (Use Cases)
+- `src/posts/application/use-cases/create-post.use-case.ts` - Agregó ModerationService + validación
+- `src/comments/application/use-cases/create-comment.use-case.ts` - Agregó PostNotFoundException + ModerationService
+- `src/likes/application/use-cases/add-like.use-case.ts` - Agregó PostNotFoundException
+
+#### Shared Infrastructure
+- `src/shared/exceptions/post-not-found.exception.ts` - Cambió herencia a NotFoundException
+- `src/shared/filters/exception.filter.ts` - Agregó orden correcta de excepciones
+
+#### Test Configuration
+- `package.json` - Agregó `--runInBand` flag
+- `tests/posts.integration.spec.ts` - Sequential cleanup sin Promise.all()
+
+---
+
+### Beneficios Alcanzados
+
+✅ **Response Uniforme**: Envelope pattern con spread permite acceso flexible
+✅ **Moderación Efectiva**: Palabras prohibidas bloqueadas antes de persistencia
+✅ **Errores Semánticos**: 404 para no encontrado, 400 para validación
+✅ **Tests Estables**: Deadlocks eliminados, suite completa sin timeouts
+✅ **Clean Architecture Mantenida**: Separación de capas respetada, validaciones en use cases
+
 
 
