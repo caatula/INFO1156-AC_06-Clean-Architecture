@@ -1,3 +1,12 @@
+## Ejecución de tests
+
+Para poder ejecutar los tests de integración correctamente,  usar los siguientes pasos:
+1. `pnpm install`
+2. `pnpm prisma generate`
+3. `pnpm prisma migrate deploy`
+4. `pnpm test`
+
+
 # Clean Architecture - Documentación de Soluciones
 
 ## CATALINA: Repository Pattern Implementation
